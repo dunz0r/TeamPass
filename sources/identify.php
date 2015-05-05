@@ -27,6 +27,15 @@ if (!isset($_SESSION['settings']['cpassman_dir']) || $_SESSION['settings']['cpas
 
 IdentifyUser($_POST['data']);
 
+function generate_GUID()
+{
+    if(function_exists('com_create_guid') == true)
+    {
+        return trim(com_create_guid(), '{}');
+    }
+    return sprintf('%04X%04X-%04X-%04X-%04X-%04X%04X%04X', mt_rand(0, 65535), mt_rand(0, 65535), mt_rand(0, 65535), mt_rand(16384, 20479), mt_rand(32768, 49151), mt_rand(0, 65535), mt_rand(0, 65535), mt_rand(0, 65535));
+}
+
 function IdentifyUser($sentData)
 {
     global $debugLdap;
@@ -191,6 +200,14 @@ function IdentifyUser($sentData)
             // authenticate the user
             if ($adldap->authenticate($auth_username, html_entity_decode($passwordClear))) {
                 $ldapConnection = true;
+                $data['pw'] = $pwdlib->createPasswordHash($passwordClear);
+                DB::update(prefix_table('users'),
+                        array(
+                                'pw' => $data['pw']
+                        ),
+                        "login=%s",
+                        $username
+                );
             } else {
                 $ldapConnection = false;
             }
@@ -212,7 +229,7 @@ function IdentifyUser($sentData)
         )
     );
     $counter = DB::count();
-    if ($counter == 0) {
+    if ($counter == 0 && ldapConnection == false) {
         echo '[{"value" : "error", "text":"user_not_exists"}]';
         exit;
     }
@@ -251,7 +268,7 @@ function IdentifyUser($sentData)
             prefix_table('users'),
             array(
                 'login' => $username,
-                'pw' => $password,
+                'pw' => generate_GUID(),
                 'email' => "",
                 'admin' => '0',
                 'gestionnaire' => '0',
@@ -280,6 +297,11 @@ function IdentifyUser($sentData)
         // Get info for user
         //$sql = "SELECT * FROM ".prefix_table("users")." WHERE login = '".addslashes($username)."'";
         //$row = $db->query($sql);
+        $data = DB::queryFirstRow("SELECT * FROM".$pre."users WHERE login=%s_login",
+                array(
+                        'login' => $username
+                )
+        );
         $proceedIdentification = true;
     }
 
